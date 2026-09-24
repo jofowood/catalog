@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-SeaTable Static Catalog Generator v2
+SeaTable Static Catalog Generator
+Version 2.2
 
 Pulls artwork data and images from SeaTable, generates static HTML catalog
 Images are saved with unique filenames to avoid conflicts across multiple views
@@ -15,6 +16,8 @@ import sys
 import datetime
 from pathlib import Path
 from urllib.parse import urlparse, unquote, quote
+
+__version__ = "2.2"
 
 # Configuration - Constants (same for all catalogs)
 API_TOKEN = os.environ.get("SEATABLE_API_TOKEN", "15d2c34c1ab2c226a629c1dcb9c9e02cffec1376")
@@ -84,10 +87,11 @@ def extract_year(value):
 def natural_key(text):
     """
     Sort key that orders numbers numerically, so "No. 2" comes before "No. 10".
-    Case-insensitive.
+    Case-insensitive, and ignores spacing around numbers so "No.09" and
+    "No. 10" sort together.
     """
     parts = re.split(r'(\d+)', str(text or '').strip())
-    return [(0, int(p)) if p.isdigit() else (1, p.lower()) for p in parts]
+    return [(0, int(p)) if p.isdigit() else (1, p.strip().lower()) for p in parts]
 
 
 def sort_rows_by_year_title(rows, newest_first=True):
@@ -487,7 +491,7 @@ def main():
     page_heading = config['page_heading']
     page_title = config['page_title']
     
-    print("SeaTable Static Catalog Generator")
+    print(f"SeaTable Static Catalog Generator v{__version__}")
     print("=" * 50)
     print(f"Config: {config_file}")
     print(f"View: {view_name}")
@@ -531,6 +535,10 @@ def main():
         rows = sort_rows_by_year_title(rows, newest_first=config['newest_first'])
         direction = "newest first" if config['newest_first'] else "oldest first"
         print(f"   ✓ Sorted by year ({direction}), then title")
+        for row in rows:
+            print(f"      {extract_year(row.get(YEAR_KEY))} | {row.get(YEAR_KEY)!r} | {row.get(TITLE_KEY, '')}")
+    else:
+        print("   - Sorting OFF (sort_by_year_title not set in config) -- using SeaTable view order")
     
     # Download images
     print(f"\n4. Downloading images to {IMAGES_DIR}...")
