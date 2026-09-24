@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SeaTable Static Catalog Generator
+SeaTable Static Catalog Generator v2
 
 Pulls artwork data and images from SeaTable, generates static HTML catalog
 Images are saved with unique filenames to avoid conflicts across multiple views
@@ -10,6 +10,7 @@ import requests
 import json
 import hashlib
 import os
+import re
 import sys
 import datetime
 from pathlib import Path
@@ -34,6 +35,10 @@ CATALOG_NAV_PAGES = [
 # Images directory (shared across all catalogs, lives at repo root)
 IMAGES_DIR = Path("images")
 
+# SeaTable column keys used for sorting
+TITLE_KEY = 'gScu'
+YEAR_KEY = '4UG7'
+
 def load_config(config_file):
     """Load catalog configuration from JSON file"""
     try:
@@ -44,6 +49,10 @@ def load_config(config_file):
         required = ['view_name', 'output_file', 'page_heading', 'page_title']
         # include_purchase_button is optional, defaults to False
         config['include_purchase_button'] = config.get('include_purchase_button', False)
+        # sort_by_year_title is optional, defaults to False (keeps SeaTable view order)
+        config['sort_by_year_title'] = config.get('sort_by_year_title', False)
+        # newest_first is optional, defaults to True (only used when sorting)
+        config['newest_first'] = config.get('newest_first', True)
         missing = [field for field in required if field not in config]
         if missing:
             raise ValueError(f"Missing required config fields: {', '.join(missing)}")
@@ -58,6 +67,43 @@ def load_config(config_file):
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
+
+
+def extract_year(value):
+    """
+    Pull a four-digit year out of whatever SeaTable returns
+    (a number, "2024", or a date like "2024-03-01").
+    Returns None if no year can be found.
+    """
+    if value is None or value == '':
+        return None
+    match = re.search(r'\d{4}', str(value))
+    return int(match.group()) if match else None
+
+
+def natural_key(text):
+    """
+    Sort key that orders numbers numerically, so "No. 2" comes before "No. 10".
+    Case-insensitive.
+    """
+    parts = re.split(r'(\d+)', str(text or '').strip())
+    return [(0, int(p)) if p.isdigit() else (1, p.lower()) for p in parts]
+
+
+def sort_rows_by_year_title(rows, newest_first=True):
+    """
+    Sort rows by year, then alphabetically by title.
+    Works with no year always go at the end.
+    """
+    def key(row):
+        year = extract_year(row.get(YEAR_KEY))
+        if year is None:
+            year_part = (1, 0)
+        else:
+            year_part = (0, -year if newest_first else year)
+        return (year_part, natural_key(row.get(TITLE_KEY, '')))
+
+    return sorted(rows, key=key)
 
 
 def get_base_token(api_token):
@@ -479,6 +525,12 @@ def main():
     print(f"\n3. Loading rows from view: {view_name}...")
     rows = get_rows(base_token, base_uuid, table["name"], view_name)
     print(f"   ✓ Found {len(rows)} rows")
+    
+    # Optionally sort by year, then title
+    if config['sort_by_year_title']:
+        rows = sort_rows_by_year_title(rows, newest_first=config['newest_first'])
+        direction = "newest first" if config['newest_first'] else "oldest first"
+        print(f"   ✓ Sorted by year ({direction}), then title")
     
     # Download images
     print(f"\n4. Downloading images to {IMAGES_DIR}...")
