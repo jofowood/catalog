@@ -20,7 +20,7 @@ from urllib.parse import urlparse, unquote, quote
 __version__ = "2.2"
 
 # Configuration - Constants (same for all catalogs)
-API_TOKEN = os.environ.get("SEATABLE_API_TOKEN", "15d2c34c1ab2c226a629c1dcb9c9e02cffec1376")
+API_TOKEN = os.environ["SEATABLE_API_TOKEN"]
 SERVER_URL = "https://cloud.seatable.io"
 TABLE_NAME = "Works & Exhibits"
 
